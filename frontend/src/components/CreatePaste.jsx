@@ -11,6 +11,7 @@ export default function CreatePaste() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const [editable, setEditable] = useState(false);
 
   async function handleCreate() {
     if (!content.trim()) {
@@ -20,7 +21,7 @@ export default function CreatePaste() {
     setError(null);
     setLoading(true);
     try {
-      const { id } = await createPaste(content, language);
+      const { id } = await createPaste(content, language, editable);
       navigate(`/${id}`);
     } catch (err) {
       setError(err.message);
@@ -42,6 +43,14 @@ export default function CreatePaste() {
             <option key={lang} value={lang}>{lang}</option>
           ))}
         </select>
+        <label className="editable-toggle">
+          <input
+            type="checkbox"
+            checked={editable}
+            onChange={(e) => setEditable(e.target.checked)}
+          />
+          Allow live editing by anyone with the link
+        </label>
         <button onClick={handleCreate} disabled={loading}>
           {loading ? 'Sharing…' : 'Share'}
         </button>

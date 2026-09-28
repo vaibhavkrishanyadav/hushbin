@@ -104,3 +104,18 @@ body {
   text-align: center;
   color: #7d8590;
 }
+
+.editable-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #7d8590;
+  cursor: pointer;
+}
+
+.live-tag {
+  color: #3fb950;
+  font-size: 12px;
+  font-weight: 500;
+}

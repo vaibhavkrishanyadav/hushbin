@@ -4,7 +4,7 @@ import Editor from '@monaco-editor/react';
 import { io } from 'socket.io-client';
 import { fetchPaste } from '../lib/api';
 
-const SOCKET_URL = 'http://localhost:3000';
+const SOCKET_URL = import.meta.env.VITE_API_URL;
 
 export default function ViewPaste() {
   const { id } = useParams();
@@ -12,7 +12,8 @@ export default function ViewPaste() {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   const socketRef = useRef(null);
-  const isRemoteUpdate = useRef(false); // prevents echo loop
+  const editorRef = useRef(null);
+  const suppressNextChange = useRef(false);
 
   useEffect(() => {
     fetchPaste(id)
@@ -28,19 +29,27 @@ export default function ViewPaste() {
     socket.emit('join-paste', id);
 
     socket.on('content-change', (newContent) => {
-      isRemoteUpdate.current = true;
-      setPaste((prev) => ({ ...prev, content: newContent }));
+      const editor = editorRef.current;
+      if (!editor || editor.getValue() === newContent) return;
+
+      suppressNextChange.current = true;
+      const position = editor.getPosition();
+      editor.setValue(newContent);
+      if (position) editor.setPosition(position); // keep cursor from jumping to start
     });
 
     return () => socket.disconnect();
   }, [paste?.editable, id]);
 
+  function handleEditorMount(editor) {
+    editorRef.current = editor;
+  }
+
   function handleEditorChange(value) {
-    if (isRemoteUpdate.current) {
-      isRemoteUpdate.current = false; // skip broadcasting the update we just received
+    if (suppressNextChange.current) {
+      suppressNextChange.current = false;
       return;
     }
-    setPaste((prev) => ({ ...prev, content: value }));
     socketRef.current?.emit('content-change', { id, content: value });
   }
 
@@ -59,7 +68,7 @@ export default function ViewPaste() {
     );
   }
 
-  if (!paste) return <div className="view-paste loading">Loading…</div>;
+  if (!paste) return <div className="view-paste loading">Loading snippet…</div>;
 
   return (
     <div className="view-paste">
@@ -69,7 +78,7 @@ export default function ViewPaste() {
           <span className="lang-tag">{paste.language}</span>
           {paste.editable && <span className="live-tag">● Live</span>}
           <button onClick={handleCopyLink}>{copied ? 'Copied!' : 'Copy link'}</button>
-          <Link to="/" className="new-paste-btn">New paste</Link>
+          <Link to="/" className="new-paste-btn">New snippet</Link>
         </div>
       </header>
 
@@ -77,7 +86,8 @@ export default function ViewPaste() {
         <Editor
           height="70vh"
           language={paste.language}
-          value={paste.content}
+          defaultValue={paste.content}
+          onMount={handleEditorMount}
           onChange={handleEditorChange}
           theme="vs-dark"
           options={{ fontSize: 14, minimap: { enabled: false }, readOnly: !paste.editable, wordWrap: 'on' }}

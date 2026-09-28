@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -9,12 +10,12 @@ const { createPasteLimiter } = require('./middleware/rateLimit');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: 'http://localhost:5173' }
+  cors: { origin: process.env.FRONTEND_URL }
 });
 
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({ origin: process.env.FRONTEND_URL }));
 app.use(express.json({ limit: '600kb' }));
 
 app.use('/api/paste', (req, res, next) => {
@@ -27,19 +28,13 @@ app.get('/', (req, res) => {
   res.send('Hushbin backend is running 🚀');
 });
 
-// --- Live editing via Socket.io ---
-const saveTimers = new Map(); // debounce DB writes per paste id
+const saveTimers = new Map();
 
 io.on('connection', (socket) => {
-  socket.on('join-paste', (pasteId) => {
-    socket.join(pasteId);
-  });
+  socket.on('join-paste', (pasteId) => socket.join(pasteId));
 
   socket.on('content-change', ({ id, content }) => {
-    // Broadcast to everyone else viewing this paste
     socket.to(id).emit('content-change', content);
-
-    // Debounce the DB write so we don't hit SQLite on every keystroke
     if (saveTimers.has(id)) clearTimeout(saveTimers.get(id));
     const timer = setTimeout(() => {
       try {

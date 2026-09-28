@@ -5,8 +5,17 @@ const db = require('../db');
 const router = express.Router();
 const MAX_CONTENT_SIZE = 500 * 1024;
 
+// Map expiry option → milliseconds (null = never)
+const EXPIRY_OPTIONS = {
+  never: null,
+  '1h': 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000,
+  '48h': 48 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000
+};
+
 router.post('/', (req, res) => {
-  const { content, language, editable } = req.body;
+  const { content, language, editable, expiry } = req.body;
 
   if (!content || typeof content !== 'string' || content.trim().length === 0) {
     return res.status(400).json({ error: 'Content is required' });
@@ -18,16 +27,20 @@ router.post('/', (req, res) => {
   const id = nanoid(8);
   const createdAt = Date.now();
 
+  const expiryKey = expiry && EXPIRY_OPTIONS.hasOwnProperty(expiry) ? expiry : 'never';
+  const durationMs = EXPIRY_OPTIONS[expiryKey];
+  const expiresAt = durationMs ? createdAt + durationMs : null;
+
   try {
     const stmt = db.prepare(`
-      INSERT INTO pastes (id, content, language, editable, created_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO pastes (id, content, language, editable, created_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(id, content, language || 'plaintext', editable ? 1 : 0, createdAt);
+    stmt.run(id, content, language || 'plaintext', editable ? 1 : 0, createdAt, expiresAt);
     res.status(201).json({ id, url: `/${id}` });
   } catch (err) {
-    console.error('Error creating paste:', err);
-    res.status(500).json({ error: 'Failed to create paste' });
+    console.error('Error creating snippet:', err);
+    res.status(500).json({ error: 'Failed to create snippet' });
   }
 });
 
@@ -35,24 +48,25 @@ router.get('/:id', (req, res) => {
   const { id } = req.params;
   try {
     const stmt = db.prepare('SELECT * FROM pastes WHERE id = ?');
-    const paste = stmt.get(id);
-    if (!paste) return res.status(404).json({ error: 'Paste not found' });
+    const snippet = stmt.get(id);
+    if (!snippet) return res.status(404).json({ error: 'Snippet not found' });
 
-    if (paste.expires_at && Date.now() > paste.expires_at) {
+    if (snippet.expires_at && Date.now() > snippet.expires_at) {
       db.prepare('DELETE FROM pastes WHERE id = ?').run(id);
-      return res.status(404).json({ error: 'Paste has expired' });
+      return res.status(404).json({ error: 'This snippet has expired' });
     }
 
     res.json({
-      id: paste.id,
-      content: paste.content,
-      language: paste.language,
-      editable: !!paste.editable,
-      created_at: paste.created_at
+      id: snippet.id,
+      content: snippet.content,
+      language: snippet.language,
+      editable: !!snippet.editable,
+      created_at: snippet.created_at,
+      expires_at: snippet.expires_at
     });
   } catch (err) {
-    console.error('Error fetching paste:', err);
-    res.status(500).json({ error: 'Failed to fetch paste' });
+    console.error('Error fetching snippet:', err);
+    res.status(500).json({ error: 'Failed to fetch snippet' });
   }
 });
 

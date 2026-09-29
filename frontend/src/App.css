@@ -58,11 +58,50 @@ body {
 }
 
 .brand {
-  font-family: 'Fraunces', serif;
-  font-size: 19px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: var(--text-primary);
   text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, white 10%);
+  border-radius: 11px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 92%, white), var(--accent));
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 24%, transparent);
+  color: #fffaf0;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.brand:hover .brand-mark {
+  transform: translateY(-1px) rotate(-3deg);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+.brand-mark svg {
+  width: 23px;
+  height: 23px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.55;
+}
+
+.brand-wordmark {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.9px;
+  line-height: 1;
+}
+
+.brand-accent {
+  color: var(--accent);
 }
 
 .live-badge {

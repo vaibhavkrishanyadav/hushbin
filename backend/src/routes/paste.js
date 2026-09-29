@@ -24,24 +24,32 @@ router.post('/', (req, res) => {
     return res.status(413).json({ error: 'Content too large (max 500KB)' });
   }
 
-  const id = nanoid(8);
   const createdAt = Date.now();
-
   const expiryKey = expiry && EXPIRY_OPTIONS.hasOwnProperty(expiry) ? expiry : 'never';
   const durationMs = EXPIRY_OPTIONS[expiryKey];
   const expiresAt = durationMs ? createdAt + durationMs : null;
 
-  try {
-    const stmt = db.prepare(`
-      INSERT INTO pastes (id, content, language, editable, created_at, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    stmt.run(id, content, language || 'plaintext', editable ? 1 : 0, createdAt, expiresAt);
-    res.status(201).json({ id, url: `/${id}` });
-  } catch (err) {
-    console.error('Error creating snippet:', err);
-    res.status(500).json({ error: 'Failed to create snippet' });
+  const stmt = db.prepare(`
+    INSERT INTO pastes (id, content, language, editable, created_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const MAX_RETRIES = 5;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const id = nanoid(8);
+    try {
+      stmt.run(id, content, language || 'plaintext', editable ? 1 : 0, createdAt, expiresAt);
+      return res.status(201).json({ id, url: `/${id}` }); // success
+    } catch (err) {
+      if (err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+        continue; // collision — try again with a new id
+      }
+      console.error('Error creating snippet:', err);
+      return res.status(500).json({ error: 'Failed to create snippet' });
+    }
   }
+
+  res.status(500).json({ error: 'Could not generate a unique link. Please try again.' });
 });
 
 router.get('/:id', (req, res) => {

@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
-const db = require('./db');
+const { db, initDb } = require('./db');
 const pasteRoutes = require('./routes/paste');
 const { createPasteLimiter } = require('./middleware/rateLimit');
 
@@ -35,10 +35,14 @@ io.on('connection', (socket) => {
 
   socket.on('content-change', ({ id, content }) => {
     socket.to(id).emit('content-change', content);
+
     if (saveTimers.has(id)) clearTimeout(saveTimers.get(id));
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       try {
-        db.prepare('UPDATE pastes SET content = ? WHERE id = ?').run(content, id);
+        await db.execute({
+          sql: 'UPDATE pastes SET content = ? WHERE id = ?',
+          args: [content, id]
+        });
       } catch (err) {
         console.error('Failed to persist live edit:', err);
       }
@@ -48,6 +52,14 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Hushbin backend running on http://localhost:${PORT}`);
-});
+// Initialize DB, then start the server
+initDb()
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`Hushbin backend running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to initialize database:', err);
+    process.exit(1);
+  });

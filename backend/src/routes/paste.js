@@ -1,11 +1,10 @@
 const express = require('express');
 const { nanoid } = require('nanoid');
-const db = require('../db');
+const { db } = require('../db');
 
 const router = express.Router();
 const MAX_CONTENT_SIZE = 500 * 1024;
 
-// Map expiry option → milliseconds (null = never)
 const EXPIRY_OPTIONS = {
   never: null,
   '1h': 60 * 60 * 1000,
@@ -14,7 +13,7 @@ const EXPIRY_OPTIONS = {
   '7d': 7 * 24 * 60 * 60 * 1000
 };
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { content, language, editable, expiry } = req.body;
 
   if (!content || typeof content !== 'string' || content.trim().length === 0) {
@@ -29,20 +28,19 @@ router.post('/', (req, res) => {
   const durationMs = EXPIRY_OPTIONS[expiryKey];
   const expiresAt = durationMs ? createdAt + durationMs : null;
 
-  const stmt = db.prepare(`
-    INSERT INTO pastes (id, content, language, editable, created_at, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-
   const MAX_RETRIES = 5;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const id = nanoid(8);
     try {
-      stmt.run(id, content, language || 'plaintext', editable ? 1 : 0, createdAt, expiresAt);
-      return res.status(201).json({ id, url: `/${id}` }); // success
+      await db.execute({
+        sql: `INSERT INTO pastes (id, content, language, editable, created_at, expires_at)
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [id, content, language || 'plaintext', editable ? 1 : 0, createdAt, expiresAt]
+      });
+      return res.status(201).json({ id, url: `/${id}` });
     } catch (err) {
-      if (err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
-        continue; // collision — try again with a new id
+      if (err.message && err.message.includes('UNIQUE constraint')) {
+        continue; // collision, retry with new id
       }
       console.error('Error creating snippet:', err);
       return res.status(500).json({ error: 'Failed to create snippet' });
@@ -52,15 +50,19 @@ router.post('/', (req, res) => {
   res.status(500).json({ error: 'Could not generate a unique link. Please try again.' });
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const stmt = db.prepare('SELECT * FROM pastes WHERE id = ?');
-    const snippet = stmt.get(id);
+    const result = await db.execute({
+      sql: 'SELECT * FROM pastes WHERE id = ?',
+      args: [id]
+    });
+    const snippet = result.rows[0];
+
     if (!snippet) return res.status(404).json({ error: 'Snippet not found' });
 
     if (snippet.expires_at && Date.now() > snippet.expires_at) {
-      db.prepare('DELETE FROM pastes WHERE id = ?').run(id);
+      await db.execute({ sql: 'DELETE FROM pastes WHERE id = ?', args: [id] });
       return res.status(404).json({ error: 'This snippet has expired' });
     }
 

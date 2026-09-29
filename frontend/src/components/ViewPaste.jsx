@@ -3,6 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { io } from 'socket.io-client';
 import { fetchPaste } from '../lib/api';
+import { useTheme } from '../hooks/useTheme';
+import Header from './Header';
+import ThemeToggle from './ThemeToggle';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL;
 
@@ -14,6 +17,7 @@ export default function ViewPaste() {
   const socketRef = useRef(null);
   const editorRef = useRef(null);
   const suppressNextChange = useRef(false);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     fetchPaste(id)
@@ -35,7 +39,7 @@ export default function ViewPaste() {
       suppressNextChange.current = true;
       const position = editor.getPosition();
       editor.setValue(newContent);
-      if (position) editor.setPosition(position); // keep cursor from jumping to start
+      if (position) editor.setPosition(position);
     });
 
     return () => socket.disconnect();
@@ -61,8 +65,10 @@ export default function ViewPaste() {
 
   if (error) {
     return (
-      <div className="view-paste">
-        <header className="topbar"><Link to="/" className="brand">Hushbin</Link></header>
+      <div className="page">
+        <Header>
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+        </Header>
         <div className="error-banner">{error}</div>
       </div>
     );
@@ -71,26 +77,23 @@ export default function ViewPaste() {
   if (!paste) return <div className="view-paste loading">Loading snippet…</div>;
 
   return (
-    <div className="view-paste">
-      <header className="topbar">
-        <Link to="/" className="brand">Hushbin</Link>
-        <div className="paste-meta">
-          <span className="lang-tag">{paste.language}</span>
-          {paste.editable && <span className="live-tag">● Live</span>}
-          <button onClick={handleCopyLink}>{copied ? 'Copied!' : 'Copy link'}</button>
-          <Link to="/" className="new-paste-btn">New snippet</Link>
-        </div>
-      </header>
+    <div className="page">
+      <Header live={paste.editable}>
+        <span className="lang-tag">{paste.language}</span>
+        <button className="btn" onClick={handleCopyLink}>{copied ? 'Copied!' : 'Copy link'}</button>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} />
+        <Link to="/" className="btn btn-primary">New snippet</Link>
+      </Header>
 
       <div className="editor-wrap">
         <Editor
-          height="70vh"
+          height="100%"
           language={paste.language}
           defaultValue={paste.content}
           onMount={handleEditorMount}
           onChange={handleEditorChange}
-          theme="vs-dark"
-          options={{ fontSize: 14, minimap: { enabled: false }, readOnly: !paste.editable, wordWrap: 'on' }}
+          theme={theme === 'dark' ? 'vs-dark' : 'light'}
+          options={{ fontSize: 14, minimap: { enabled: false }, readOnly: !paste.editable, wordWrap: 'on', automaticLayout: true }}
         />
       </div>
     </div>

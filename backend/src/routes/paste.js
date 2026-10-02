@@ -37,6 +37,7 @@ router.post('/', async (req, res) => {
               VALUES (?, ?, ?, ?, ?, ?)`,
         args: [id, content, language || 'plaintext', editable ? 1 : 0, createdAt, expiresAt]
       });
+      console.log(`Snippet created: ${id} at ${new Date().toISOString()}`);
       return res.status(201).json({ id, url: `/${id}` });
     } catch (err) {
       if (err.message && err.message.includes('UNIQUE constraint')) {
